@@ -22,10 +22,9 @@ public final class Bits32_24_8 {
      * @throws IllegalArgumentException Si {@code bits24} ou {@code bits8} dépasse leur plage.
      */
     public static int pack(int bits24, int bits8) {
-
-       Preconditions.checkArgument((bits24>>24)==0);
-      Preconditions.checkArgument((bits8>>8)==0);
-        return (bits24  << 8) | (bits8 & 0xFF);
+        Preconditions.checkArgument((bits24>>24)==0);
+        Preconditions.checkArgument((bits8>>8)==0);
+        return (bits24 << 8) | (bits8 & 0xFF);
     }
 
 

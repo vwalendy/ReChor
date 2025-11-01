@@ -8,21 +8,18 @@ import java.nio.IntBuffer;
 
 /**
  * @author Valentin Walendy (393413)
- *  *  @author Ruben Lellouche (400288)
- * Implémentation de l'interface Connections utilisant des buffers pour stocker les données des connexions.
+ * @author Ruben Lellouche (400288)
+ *
+ * Implémentation de l'interface Connections utilisant des buffers
+ * pour stocker les données de connexions et leurs successeurs.
  */
 public final class BufferedConnections implements Connections {
 
-    private static final int DEP_STOP_ID = 0;
-    private static final int DEP_MINUTES = 1;
-    private static final int ARR_STOP_ID = 2;
-    private static final int ARR_MINUTES = 3;
-    private static final int TRIP_POS_ID = 4;
-
-    private static final int NEXT_CONNECTION_ID = 0;
-
-    private final StructuredBuffer buffer;
-    private final IntBuffer succBuffer;
+    private static final int DEP_STOP_ID   = 0;
+    private static final int DEP_MINUTES   = 1;
+    private static final int ARR_STOP_ID   = 2;
+    private static final int ARR_MINUTES   = 3;
+    private static final int TRIP_POS_ID   = 4;
 
     private static final Structure STRUCTURE_BUFFER = new Structure(
             Structure.field(DEP_STOP_ID, Structure.FieldType.U16),
@@ -32,26 +29,25 @@ public final class BufferedConnections implements Connections {
             Structure.field(TRIP_POS_ID, Structure.FieldType.S32)
     );
 
-    private static final Structure STRUCTURE_SUCC = new Structure(
-            Structure.field(NEXT_CONNECTION_ID, Structure.FieldType.S32)
-    );
+    private final StructuredBuffer buffer;
+    private final IntBuffer      succBuffer;
 
     /**
-     * Construit un objet BufferedConnections à partir des buffers donnés.
+     * Construit un BufferedConnections à partir des buffers donnés.
      *
-     * @param buffer     Le ByteBuffer contenant les données des connexions.
-     * @param succBuffer Le ByteBuffer contenant les ID des connexions suivantes.
+     * @param bufData ByteBuffer des données de connexions
+     * @param bufSucc ByteBuffer des indices de connexion suivante
      */
-    public BufferedConnections(ByteBuffer buffer, ByteBuffer succBuffer) {
-        this.buffer = new StructuredBuffer(STRUCTURE_BUFFER, buffer);
-        this.succBuffer = succBuffer.asIntBuffer();
+    public BufferedConnections(ByteBuffer bufData,ByteBuffer bufSucc) {
+        this.buffer = new StructuredBuffer(STRUCTURE_BUFFER, bufData);
+        this.succBuffer = bufSucc.asIntBuffer();
     }
 
     /**
-     * Retourne l'identifiant de l'arrêt de départ de la connexion donnée.
+     * Retourne l'identifiant de l'arrêt de départ pour la connexion spécifiée.
      *
-     * @param id L'identifiant de la connexion.
-     * @return L'identifiant de l'arrêt de départ.
+     * @param id identifiant de la connexion
+     * @return int identifiant de l'arrêt de départ
      */
     @Override
     public int depStopId(int id) {
@@ -59,10 +55,10 @@ public final class BufferedConnections implements Connections {
     }
 
     /**
-     * Retourne l'heure de départ en minutes après minuit de la connexion donnée.
+     * Retourne l'heure de départ en minutes après minuit.
      *
-     * @param id L'identifiant de la connexion.
-     * @return L'heure de départ en minutes.
+     * @param id identifiant de la connexion
+     * @return int nombre de minutes depuis minuit
      */
     @Override
     public int depMins(int id) {
@@ -70,10 +66,10 @@ public final class BufferedConnections implements Connections {
     }
 
     /**
-     * Retourne l'identifiant de l'arrêt d'arrivée de la connexion donnée.
+     * Retourne l'identifiant de l'arrêt d'arrivée pour la connexion spécifiée.
      *
-     * @param id L'identifiant de la connexion.
-     * @return L'identifiant de l'arrêt d'arrivée.
+     * @param id identifiant de la connexion
+     * @return int identifiant de l'arrêt d'arrivée
      */
     @Override
     public int arrStopId(int id) {
@@ -81,10 +77,10 @@ public final class BufferedConnections implements Connections {
     }
 
     /**
-     * Retourne l'heure d'arrivée en minutes après minuit de la connexion donnée.
+     * Retourne l'heure d'arrivée en minutes après minuit.
      *
-     * @param id L'identifiant de la connexion.
-     * @return L'heure d'arrivée en minutes.
+     * @param id identifiant de la connexion
+     * @return int nombre de minutes depuis minuit
      */
     @Override
     public int arrMins(int id) {
@@ -92,32 +88,34 @@ public final class BufferedConnections implements Connections {
     }
 
     /**
-     * Retourne l'identifiant du trajet auquel appartient la connexion donnée.
+     * Retourne l'identifiant du trajet associé à la connexion spécifiée.
      *
-     * @param id L'identifiant de la connexion.
-     * @return L'identifiant du trajet.
+     * @param id identifiant de la connexion
+     * @return int identifiant du trajet (24 bits)
      */
     @Override
     public int tripId(int id) {
-        return Bits32_24_8.unpack24(buffer.getS32(TRIP_POS_ID, id));
+        int packed = buffer.getS32(TRIP_POS_ID, id);
+        return Bits32_24_8.unpack24(packed);
     }
 
     /**
-     * Retourne la position de la connexion dans le trajet correspondant.
+     * Retourne la position de la connexion dans son trajet.
      *
-     * @param id L'identifiant de la connexion.
-     * @return La position dans le trajet.
+     * @param id identifiant de la connexion
+     * @return int position dans le trajet (8 bits)
      */
     @Override
     public int tripPos(int id) {
-        return Bits32_24_8.unpack8(buffer.getS32(TRIP_POS_ID, id));
+        int packed = buffer.getS32(TRIP_POS_ID, id);
+        return Bits32_24_8.unpack8(packed);
     }
 
     /**
-     * Retourne l'identifiant de la connexion suivante dans le trajet.
+     * Retourne l'identifiant de la connexion suivante.
      *
-     * @param id L'identifiant de la connexion.
-     * @return L'identifiant de la connexion suivante, ou une valeur spéciale si aucune connexion suivante n'existe.
+     * @param id identifiant de la connexion
+     * @return int identifiant de la connexion suivante, ou -1 s'il n'existe pas
      */
     @Override
     public int nextConnectionId(int id) {
@@ -127,7 +125,7 @@ public final class BufferedConnections implements Connections {
     /**
      * Retourne le nombre total de connexions stockées.
      *
-     * @return Le nombre total de connexions.
+     * @return int nombre de connexions
      */
     @Override
     public int size() {

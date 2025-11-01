@@ -87,7 +87,7 @@ public interface TimeTable {
      * @return l'index de la gare associée
      */
     default int stationId(int stopId){
-        return isStationId(stopId) ? stopId : stopId - stations().size();
+        return isStationId(stopId) ? stopId : platforms().stationId(stopId - stations().size());
     }
     /**
      * Retourne le nom de voie ou de quai de l'arrêt d'index donné, ou null si c'est une gare.

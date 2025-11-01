@@ -9,48 +9,37 @@ import java.util.Objects;
 import java.util.function.LongConsumer;
 
 /**
- *  * * @author Valentin Walendy (393413)
- *  *  * @author Ruben Lellouche (400288)
- * Classe représentant une frontière Pareto constituée de tuples empaquetés.
- * Chaque tuple est encodé dans un long et représente des critères d'optimisation.
+ * @author Valentin Walendy (393413)
+ * @author Ruben Lellouche (400288)
  */
-public final class ParetoFront {
+public class ParetoFront {
 
-    /** Une frontière Pareto vide. */
     public static final ParetoFront EMPTY = new ParetoFront(new long[0]);
     private final long[] criteria;
 
     /**
-     * Constructeur privé.
-     *
-     * @param criteria le tableau de tuples représentant la frontière Pareto.
+     * Private constructor initializing the Pareto criteria array.
+     * Copies the input array to ensure immutability.
      */
     private ParetoFront(long[] criteria) {
-        this.criteria = criteria;
+        this.criteria = Arrays.copyOf(criteria, criteria.length);
     }
 
     /**
-     * Retourne le nombre de tuples présents dans la frontière.
-     *
-     * @return la taille de la frontière.
+     * Returns the number of tuples in the Pareto front.
      */
     public int size() {
         return criteria.length;
     }
 
     /**
-     * Retourne le tuple dont les heures d'arrivée et le nombre de changements correspondent
-     * aux valeurs spécifiées.
-     *
-     * @param arrMins l'heure d'arrivée attendue.
-     * @param changes le nombre de changements attendu.
-     * @return le tuple correspondant.
-     * @throws NoSuchElementException si aucun tuple ne correspond.
+     * Retrieves a tuple matching given arrival minutes and changes count.
+     * @throws NoSuchElementException if no matching tuple is found.
      */
     public long get(int arrMins, int changes) {
-        for (int i = 0; i < criteria.length; i++) {
-            long crit = criteria[i];
-            if (PackedCriteria.arrMins(crit) == arrMins && PackedCriteria.changes(crit) == changes) {
+        for (long crit : criteria) {
+            if (PackedCriteria.arrMins(crit) == arrMins
+                    && PackedCriteria.changes(crit) == changes) {
                 return crit;
             }
         }
@@ -58,258 +47,224 @@ public final class ParetoFront {
     }
 
     /**
-     * Exécute l'action spécifiée pour chaque tuple de la frontière.
-     *
-     * @param action l'action à appliquer sur chaque tuple.
-     * @throws NullPointerException si l'action est nulle.
+     * Applies the given action to each tuple in the Pareto front.
      */
     public void forEach(LongConsumer action) {
         Objects.requireNonNull(action);
-        for (long criterion : criteria) {
-            action.accept(criterion);
+        for (long crit : criteria) {
+            action.accept(crit);
         }
     }
 
     /**
-     * Retourne une représentation textuelle de la frontière Pareto.
-     * Chaque tuple est affiché avec ses heures de départ (si présentes), d'arrivée et le nombre de changements.
-     *
-     * @return une chaîne décrivant la frontière.
+     * Builds a string representation listing departure (if any), arrival, and changes.
      */
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-
-        for (long criterion : criteria) {
-            if (PackedCriteria.hasDepMins(criterion)) {
-                int depMins = PackedCriteria.depMins(criterion);
-                Duration depDuration = Duration.ofMinutes(depMins);
-                sb.append("dep: ").append(FormatterFr.formatDuration(depDuration));
-                sb.append(", ");
+        for (long crit : criteria) {
+            if (PackedCriteria.hasDepMins(crit)) {
+                int dep = PackedCriteria.depMins(crit);
+                sb.append("dep: ")
+                        .append(FormatterFr.formatDuration(Duration.ofMinutes(dep)))
+                        .append(", ");
             }
-            int arrMins = PackedCriteria.arrMins(criterion);
-            Duration arrduration = Duration.ofMinutes(arrMins);
-            sb.append("arr : ").append(FormatterFr.formatDuration(arrduration));
-            sb.append(", ");
-            sb.append("Changes : ").append(PackedCriteria.changes(criterion));
-            sb.append("\n");
+            int arr = PackedCriteria.arrMins(crit);
+            sb.append("arr: ")
+                    .append(FormatterFr.formatDuration(Duration.ofMinutes(arr)))
+                    .append(", ");
+            sb.append("Changes: ")
+                    .append(PackedCriteria.changes(crit))
+                    .append("\n");
         }
         return sb.toString();
     }
 
     /**
-     * Classe Builder pour construire dynamiquement une frontière Pareto.
+     * Builder class for constructing a Pareto front incrementally.
      */
     public static class Builder {
-
-        private long[] frontiere;
-        private int size;
         private static final int INITIAL_CAPACITY = 2;
+        private long[] front;
+        private int size;
 
         /**
-         * Construit un Builder avec une frontière vide.
+         * Initializes an empty builder.
          */
         public Builder() {
-            this.frontiere = new long[INITIAL_CAPACITY];
-            this.size = 0;
+            this.front = new long[INITIAL_CAPACITY];
+            this.size  = 0;
         }
 
         /**
-         * Constructeur de copie.
-         *
-         * @param that le Builder à copier.
+         * Copy constructor.
          */
         public Builder(Builder that) {
-            this.frontiere = Arrays.copyOf(that.frontiere, that.frontiere.length);
-            this.size = that.size;
+            this.front = Arrays.copyOf(that.front, that.front.length);
+            this.size  = that.size;
         }
 
         /**
-         * Indique si la frontière en cours de construction est vide.
-         *
-         * @return true si la frontière est vide, false sinon.
+         * Removes all tuples dominated by the given tuple.
          */
+        private void compact(long tup) {
+            for (int i = 0; i < size; i++) {
+                if (PackedCriteria.dominatesOrIsEqual(tup, front[i])) {
+                    System.arraycopy(front, i + 1, front, i, size - (i + 1));
+                    size--;
+                    i--;  // recheck at this index
+                }
+            }
+        }
+
+        /**
+         * Adds a packed tuple, maintaining lexicographic order
+         * and removing tuples dominated by the new one.
+         */
+        public Builder add(long tup) {
+            // Skip if an existing tuple dominates
+            for (int i = 0; i < size; i++) {
+                if (PackedCriteria.dominatesOrIsEqual(front[i], tup)) {
+                    return this;
+                }
+            }
+
+            // Remove dominated tuples
+            compact(tup);
+
+            // Determine insertion position lexicographically
+            int pos = 0;
+            while (pos < size && front[pos] < tup) {
+                pos++;
+            }
+
+            // Resize array if needed
+            if (size == front.length) {
+                front = Arrays.copyOf(front, front.length * 2);
+            }
+
+            // Shift elements to make room
+            if (size > pos) {
+                System.arraycopy(front, pos, front, pos + 1, size - pos);
+            }
+
+            // Insert and increment size
+            front[pos] = tup;
+            size++;
+            return this;
+        }
+
+        /**
+         * Packs parameters into a tuple and adds it to the builder.
+         */
+        public Builder add(int arrMins, int changes, int payload) {
+            return add(PackedCriteria.pack(arrMins, changes, payload));
+        }
+
+        /**
+         * Adds all tuples from another builder.
+         */
+        public Builder addAll(Builder that) {
+            for (int i = 0; i < that.size; i++) {
+                add(that.front[i]);
+            }
+            return this;
+        }
+
+        /**
+         * Checks if all tuples of 'that' builder are dominated by this builder,
+         * after forcing departure time to depMins if needed.
+         */
+        public boolean fullyDominates(Builder that, int depMins) {
+            boolean thisNoDep = true;
+            for (int i = 0; i < size; i++) {
+                if (PackedCriteria.hasDepMins(front[i])) {
+                    thisNoDep = false;
+                    break;
+                }
+            }
+            boolean thatNoDep = true;
+            for (int i = 0; i < that.size; i++) {
+                if (PackedCriteria.hasDepMins(that.front[i])) {
+                    thatNoDep = false;
+                    break;
+                }
+            }
+            if (thisNoDep && thatNoDep) {
+                if (depMins == 0) {
+                    throw new IllegalArgumentException();
+                }
+                for (int i = 0; i < that.size; i++) {
+                    long t2 = that.front[i];
+                    boolean dom = false;
+                    for (int j = 0; j < size; j++) {
+                        long t1 = front[j];
+                        if (PackedCriteria.arrMins(t1) <= PackedCriteria.arrMins(t2)
+                                && PackedCriteria.changes(t1) <= PackedCriteria.changes(t2)) {
+                            dom = true;
+                            break;
+                        }
+                    }
+                    if (!dom) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            for (int i = 0; i < that.size; i++) {
+                long t2 = PackedCriteria.withDepMins(that.front[i], depMins);
+                boolean dom = false;
+                for (int j = 0; j < size; j++) {
+                    long t1 = front[j];
+                    long x1 = PackedCriteria.hasDepMins(t1)
+                            ? t1
+                            : PackedCriteria.withDepMins(t1, depMins);
+                    if (PackedCriteria.dominatesOrIsEqual(x1, t2)) {
+                        dom = true;
+                        break;
+                    }
+                }
+                if (!dom) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /**
+         * Applies the given action to each tuple under construction.
+         */
+        public void forEach(LongConsumer action) {
+            Objects.requireNonNull(action);
+            for (int i = 0; i < size; i++) {
+                action.accept(front[i]);
+            }
+        }
+
+        /**
+         * Builds an immutable ParetoFront from the current tuples.
+         */
+        public ParetoFront build() {
+            return new ParetoFront(Arrays.copyOf(front, size));
+        }
+
+        /**
+         * Returns a textual representation of the builder's current front.
+         */
+        @Override
+        public String toString() {
+            return build().toString();
+        }
+
         public boolean isEmpty() {
             return size == 0;
         }
 
-        /**
-         * Vide la frontière en cours de construction.
-         *
-         * @return le Builder courant, pour le chaînage.
-         */
         public Builder clear() {
             size = 0;
             return this;
         }
 
-        /**
-         * Ajoute un tuple empaqueté à la frontière, en maintenant l'ordre lexicographique
-         * et en supprimant les éléments dominés.
-         *
-         * @param packedTuple le tuple empaqueté à ajouter.
-         * @return le Builder courant, pour le chaînage.
-         */
-        public Builder add(long packedTuple) {
-            for (int i = 0; i < size; i++) {
-                if (frontiere[i] == packedTuple) {
-                    return this;
-                }
-            }
-            for (int i = 0; i < size; i++) {
-                if (PackedCriteria.dominatesOrIsEqual(frontiere[i], packedTuple)) {
-                    return this;
-                }
-            }
 
-            int newSize = 0;
-            for (int i = 0; i < size; i++) {
-                if (!PackedCriteria.dominatesOrIsEqual(packedTuple, frontiere[i])) {
-                    frontiere[newSize++] = frontiere[i];
-                }
-            }
-            size = newSize;
-
-            int pos = 0;
-            while (pos < size && frontiere[pos] < packedTuple) {
-                pos++;
-            }
-
-            if (size + 1 > frontiere.length) {
-                int newCapacity = frontiere.length * 3 / 2 + 1;
-                frontiere = Arrays.copyOf(frontiere, newCapacity);
-            }
-
-            System.arraycopy(frontiere, pos, frontiere, pos + 1, size - pos);
-            frontiere[pos] = packedTuple;
-            size++;
-
-            return this;
-        }
-
-        /**
-         * Empaquette les paramètres donnés en un tuple et l'ajoute à la frontière.
-         *
-         * @param arrMins l'heure d'arrivée.
-         * @param changes le nombre de changements.
-         * @param payload le champ additionnel.
-         * @return le Builder courant, pour le chaînage.
-         */
-        public Builder add(int arrMins, int changes, int payload) {
-            long packedTuples = PackedCriteria.pack(arrMins, changes, payload);
-            return add(packedTuples);
-        }
-
-        /**
-         * Ajoute tous les tuples présents dans un autre Builder à celui-ci.
-         *
-         * @param that le Builder dont les tuples seront ajoutés.
-         * @return le Builder courant, pour le chaînage.
-         */
-        public Builder addAll(Builder that) {
-            for (int i = 0; i < that.size; i++) {
-                this.add(that.frontiere[i]);
-            }
-            return this;
-        }
-
-        /**
-         * Vérifie si le Builder courant domine complètement un autre Builder
-         * en fixant l'heure de départ des tuples de l'autre Builder à depMins.
-         *
-         * @param that le Builder dont tous les tuples doivent être dominés.
-         * @param depMins la valeur forcée de l'heure de départ.
-         * @return true si tous les tuples de l'autre Builder, après ajustement, sont dominés par au moins un tuple du Builder courant.
-         * @throws IllegalArgumentException dans certains cas d'incohérence entre heures de départ.
-         */
-        public boolean fullyDominates(Builder that, int depMins) {
-            boolean thisHasNoDep = true;
-            for (int i = 0; i < this.size; i++) {
-                if (PackedCriteria.hasDepMins(this.frontiere[i])) {
-                    thisHasNoDep = false;
-                    break;
-                }
-            }
-            boolean thatHasNoDep = true;
-            for (int i = 0; i < that.size; i++) {
-                if (PackedCriteria.hasDepMins(that.frontiere[i])) {
-                    thatHasNoDep = false;
-                    break;
-                }
-            }
-            if (thisHasNoDep && thatHasNoDep) {
-                if (depMins == 0) {
-                    throw new IllegalArgumentException();
-                }
-                for (int i = 0; i < that.size; i++) {
-                    long tupleThat = that.frontiere[i];
-                    boolean isDominated = false;
-                    for (int j = 0; j < this.size; j++) {
-                        long tupleThis = this.frontiere[j];
-                        if (PackedCriteria.arrMins(tupleThis) <= PackedCriteria.arrMins(tupleThat)
-                                && PackedCriteria.changes(tupleThis) <= PackedCriteria.changes(tupleThat)) {
-                            isDominated = true;
-                            break;
-                        }
-                    }
-                    if (!isDominated) {
-                        return false;
-                    }
-                }
-                return true;
-            } else {
-                for (int i = 0; i < that.size; i++) {
-                    long tupleThat = that.frontiere[i];
-                    long modifiedTupleThat = PackedCriteria.withDepMins(tupleThat, depMins);
-                    boolean isDominated = false;
-                    for (int j = 0; j < this.size; j++) {
-                        long tupleThis = this.frontiere[j];
-                        long modifiedTupleThis = PackedCriteria.hasDepMins(tupleThis)
-                                ? tupleThis
-                                : PackedCriteria.withDepMins(tupleThis, depMins);
-                        if (PackedCriteria.dominatesOrIsEqual(modifiedTupleThis, modifiedTupleThat)) {
-                            isDominated = true;
-                            break;
-                        }
-                    }
-                    if (!isDominated) {
-                        return false;
-                    }
-                }
-                return true;
-            }
-        }
-
-        /**
-         * Exécute l'action spécifiée pour chaque tuple de la frontière en cours de construction.
-         *
-         * @param action l'action à appliquer sur chaque tuple.
-         * @throws NullPointerException si l'action est nulle.
-         */
-        public void forEach(LongConsumer action) {
-            Objects.requireNonNull(action);
-            for (int i = 0; i < size; i++) {
-                action.accept(frontiere[i]);
-            }
-        }
-
-        /**
-         * Construit une instance immuable de ParetoFront à partir de la frontière en cours de construction.
-         *
-         * @return une instance de ParetoFront contenant les tuples actuellement stockés.
-         */
-        public ParetoFront build() {
-            long[] finalFrontiere = Arrays.copyOf(frontiere, size);
-            return new ParetoFront(finalFrontiere);
-        }
-
-        /**
-         * Retourne une représentation textuelle de la frontière en cours de construction.
-         *
-         * @return une chaîne décrivant la frontière construite.
-         */
-        public String toString() {
-            return build().toString();
-        }
     }
 }

@@ -1,7 +1,5 @@
 package ch.epfl.rechor;
 
-import ch.epfl.rechor.journey.PackedCriteria;
-
 /**
  * * @author Valentin Walendy (393413)
  * * @author Ruben Lellouche (400288)
@@ -26,15 +24,16 @@ public final class PackedRange {
      */
     public static int pack(int startInclusive, int endExclusive) {
         if (endExclusive < startInclusive) {
+
             throw new IllegalArgumentException();
         }
         if (startInclusive < 0 || startInclusive >= (1 << 24)) {
+
             throw new IllegalArgumentException();
         }
 
         int length = endExclusive - startInclusive;
         if (length > 255) {
-
             throw new IllegalArgumentException();
         }
 

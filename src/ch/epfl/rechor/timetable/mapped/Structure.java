@@ -3,121 +3,91 @@ package ch.epfl.rechor.timetable.mapped;
 import java.util.Objects;
 
 /**
- * * @author Valentin Walendy (393413)
- * * @author Ruben Lellouche (400288)
- * Structure représente une structure de données définissant le format des champs
- * dans un buffer structuré.
+ * @author Valentin Walendy (393413)
+ * @author Ruben Lellouche (400288)
+ *
+ * Représente la définition d'une structure de champs pour un buffer structuré.
+ * Pré-calcul les offsets de chaque champ pour un accès rapide.
  */
 public class Structure {
 
-    /**
-     * Enumération des types de champs supportés.
-     */
+    /** Types de champs supportés. */
     public enum FieldType {
         U8, U16, S32;
     }
 
-    /**
-     * Représente un champ de la structure avec son index et son type.
-     */
+    /** Représente un champ avec son index et son type. */
     public record Field(int index, FieldType type) {
-        /**
-         * Constructeur du record Field qui vérifie que le type n'est pas nul.
-         *
-         * @param index l'index du champ.
-         * @param type  le type du champ.
-         * @throws NullPointerException si le type est nul.
-         */
         public Field {
             Objects.requireNonNull(type);
         }
     }
 
-    /**
-     * Crée et renvoie un nouveau champ avec l'index et le type spécifiés.
-     *
-     * @param index l'index du champ.
-     * @param type  le type du champ.
-     * @return une nouvelle instance de Field.
-     */
-    public static Field field(int index, FieldType type) {
-        return new Field(index, type);
-    }
-
     private final Field[] fields;
+    private final int[] fieldOffsets;
+    private final int totalSize;
 
     /**
      * Construit une Structure à partir d'une séquence de champs.
-     * Chaque champ doit avoir un index correspondant à sa position dans le tableau.
+     * Vérifie l'index de chaque champ et pré-calcule les offsets ainsi que la taille totale.
      *
-     * @param fields la séquence de champs définissant la structure.
-     * @throws IllegalArgumentException si un champ n'a pas l'index attendu.
+     * @param fields la liste des champs, dont l'index doit correspondre à leur position
+     * @throws IllegalArgumentException si un index de champ est invalide
      */
     public Structure(Field... fields) {
+        Objects.requireNonNull(fields);
+        this.fields = new Field[fields.length];
+        this.fieldOffsets = new int[fields.length];
+        int offset = 0;
         for (int i = 0; i < fields.length; i++) {
-            if (fields[i].index() != i) {
+            Field f = fields[i];
+            if (f.index() != i) {
                 throw new IllegalArgumentException();
             }
-        }
-        this.fields = fields;
-    }
-
-    /**
-     * Calcule et renvoie la taille totale en octets de la structure.
-     *
-     * @return la taille totale en octets.
-     */
-    public int totalSize() {
-        int size = 0;
-        for (Field f : fields) {
+            this.fields[i] = f;
+            this.fieldOffsets[i] = offset;
             switch (f.type()) {
-                case U8:
-                    size += 1;
-                    break;
-                case U16:
-                    size += 2;
-                    break;
-                case S32:
-                    size += 4;
-                    break;
-                default:
-                    throw new IllegalStateException();
+                case U8  -> offset += 1;
+                case U16 -> offset += 2;
+                case S32 -> offset += 4;
+                default  -> throw new IllegalStateException();
             }
         }
-        return size;
+        this.totalSize = offset;
     }
 
     /**
-     * Calcule et renvoie l'offset (décalage en octets) d'un champ pour un élément donné.
-     *
-     * @param fieldIndex   l'index du champ dans la structure.
-     * @param elementIndex l'index de l'élément dans le buffer.
-     * @return l'offset en octets du champ pour l'élément spécifié.
-     * @throws IndexOutOfBoundsException si l'index du champ ou l'index de l'élément est invalide.
+     * Renvoie la taille en octets d'un enregistrement.
+     * @return la taille totale calculée
+     */
+    public int totalSize() {
+        return totalSize;
+    }
+
+    /**
+     * Renvoie l'offset (en octets) du début du champ pour un enregistrement donné.
+     * @param fieldIndex   index du champ (0-based)
+     * @param elementIndex index de l'enregistrement (>=0)
+     * @return l'offset en octets
+     * @throws IndexOutOfBoundsException si fieldIndex ou elementIndex est invalide
      */
     public int offset(int fieldIndex, int elementIndex) {
-        if (fieldIndex < 0 || fieldIndex >= fields.length) {
+        if (fieldIndex < 0 || fieldIndex >= fieldOffsets.length) {
             throw new IndexOutOfBoundsException();
         }
         if (elementIndex < 0) {
             throw new IndexOutOfBoundsException();
         }
-        int fieldOffset = 0;
-        for (int i = 0; i < fieldIndex; i++) {
-            switch (fields[i].type()) {
-                case U8:
-                    fieldOffset += 1;
-                    break;
-                case U16:
-                    fieldOffset += 2;
-                    break;
-                case S32:
-                    fieldOffset += 4;
-                    break;
-                default:
-                    throw new IllegalStateException();
-            }
-        }
-        return elementIndex * totalSize() + fieldOffset;
+        return elementIndex * totalSize + fieldOffsets[fieldIndex];
+    }
+
+    /**
+     * Crée un Field pour usage dans le constructeur.
+     * @param index index du champ
+     * @param type  type du champ
+     * @return le Field correspondant
+     */
+    public static Field field(int index, FieldType type) {
+        return new Field(index, type);
     }
 }

@@ -35,24 +35,20 @@ public record Journey(List<Leg> legs) {
             Leg previous = legs.get(i - 1);
             Leg current = legs.get(i);
 
-            // Vérification que l'arrêt d'arrivée de l'étape précédente est le même que l'arrêt de départ de l'étape suivante
             if (!previous.arrStop().equals(current.depStop())) {
                 throw new IllegalArgumentException();
             }
 
-            // Vérification que l'heure d'arrivée de l'étape précédente est avant l'heure de départ de l'étape suivante
             if (previous.arrTime().isAfter(current.depTime())) {
                 throw new IllegalArgumentException();
             }
 
-            // Vérification qu'il n'y a pas deux étapes à pied successives
             if (previous instanceof Leg.Foot && current instanceof Leg.Foot) {
                 throw new IllegalArgumentException();
             }
         }
     }
 
-    // Interface définissant les méthodes communes à toutes les étapes (Leg)
     public interface Leg {
 
         LocalDateTime depTime();
@@ -61,7 +57,6 @@ public record Journey(List<Leg> legs) {
         Stop arrStop();
         List<IntermediateStop> intermediateStops();
 
-        // Méthode permettant de calculer la durée de l'étape
         default Duration duration() {
             return Duration.between(depTime(), arrTime());
         }
@@ -144,7 +139,6 @@ public record Journey(List<Leg> legs) {
                 Preconditions.checkArgument(!depTime.isAfter(arrTime));
             }
 
-            // Retourne une liste vide d'arrêts intermédiaires, car un trajet à pied n'en a pas
             public List<IntermediateStop> intermediateStops() {
                 return List.of();
             }
